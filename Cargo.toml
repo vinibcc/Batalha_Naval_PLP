@@ -1,7 +1,16 @@
 [package]
-name = "Batalha_Naval_PLP"
+name = "batalha_naval_plp"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
 
 [dependencies]
-bevy = "0.17.3"
+godot = { git = "https://github.com/godot-rust/gdext", branch = "master" }
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
