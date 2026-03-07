@@ -1,39 +1,14 @@
-use godot::classes::RandomNumberGenerator;
-use godot::prelude::*;
-
 use crate::domain::disparo::RetornoDisparo;
+use crate::domain::estrategias_ia::{EstrategiaFacil, EstrategiaIA, EstrategiaIntermediaria, EstrategiaDificil};
 use crate::domain::jogador::Jogador;
-use crate::domain::tabuleiro::{Celula, EstadoTabuleiro, BOARD_SIZE};
+use crate::domain::tabuleiro::EstadoTabuleiro;
 
-pub trait EstrategiaIA {
-    fn escolher_alvo(&mut self, tabuleiro_inimigo: &EstadoTabuleiro) -> Option<(usize, usize)>;
-}
-
-pub struct EstrategiaFacil;
-
-impl EstrategiaIA for EstrategiaFacil {
-    fn escolher_alvo(&mut self, tabuleiro_inimigo: &EstadoTabuleiro) -> Option<(usize, usize)> {
-        let mut alvos_disponiveis = Vec::new();
-
-        for x in 0..BOARD_SIZE {
-            for y in 0..BOARD_SIZE {
-                if let Some(celula) = tabuleiro_inimigo.valor_celula(x, y) {
-                    if matches!(celula, Celula::Vazio | Celula::Ocupado(_)) {
-                        alvos_disponiveis.push((x, y));
-                    }
-                }
-            }
-        }
-
-        if alvos_disponiveis.is_empty() {
-            return None;
-        }
-
-        let mut rng = RandomNumberGenerator::new_gd();
-        rng.randomize();
-        let idx = rng.randi_range(0, (alvos_disponiveis.len() - 1) as i32) as usize;
-        Some(alvos_disponiveis[idx])
-    }
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(dead_code)]
+pub enum Dificuldade {
+    Facil,
+    Intermediario,
+    Dificil,
 }
 
 pub struct JogadorIA {
@@ -42,7 +17,13 @@ pub struct JogadorIA {
 }
 
 impl JogadorIA {
-    pub fn novo(estrategia: Box<dyn EstrategiaIA>) -> Self {
+    pub fn novo(dificuldade: Dificuldade) -> Self {
+        let estrategia: Box<dyn EstrategiaIA> = match dificuldade {
+            Dificuldade::Facil => Box::new(EstrategiaFacil),
+            Dificuldade::Intermediario => Box::new(EstrategiaIntermediaria::nova()),
+            Dificuldade::Dificil => Box::new(EstrategiaDificil::nova()),
+        };
+
         Self {
             jogador: Jogador::novo_ia(),
             estrategia,
@@ -50,7 +31,16 @@ impl JogadorIA {
     }
 
     pub fn novo_facil() -> Self {
-        Self::novo(Box::new(EstrategiaFacil))
+        Self::novo(Dificuldade::Facil)
+    }
+
+    pub fn novo_intermediario() -> Self {
+        Self::novo(Dificuldade::Intermediario)
+    }
+
+    #[allow(dead_code)]
+    pub fn novo_dificil() -> Self {
+        Self::novo(Dificuldade::Dificil)
     }
 
     pub fn jogador_mut(&mut self) -> &mut Jogador {
@@ -59,6 +49,10 @@ impl JogadorIA {
 
     pub fn escolher_alvo(&mut self, tabuleiro_inimigo: &EstadoTabuleiro) -> Option<(usize, usize)> {
         self.estrategia.escolher_alvo(tabuleiro_inimigo)
+    }
+
+    pub fn notificar_resultado(&mut self, x: usize, y: usize, resultado: &RetornoDisparo) {
+        self.estrategia.notificar_resultado(x, y, resultado);
     }
 
     pub fn receber_disparo(&mut self, x: usize, y: usize) -> RetornoDisparo {

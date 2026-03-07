@@ -1,8 +1,9 @@
-use godot::classes::{INode2D, Input, InputEvent, InputEventMouseButton, Label, Node2D, TileMapLayer};
+use godot::classes::{INode2D, Input, InputEvent, InputEventKey, InputEventMouseButton, Label, Node2D, TileMapLayer};
 use godot::global::MouseButton;
 use godot::prelude::*;
 
 use crate::application::fase_posicionamento::FasePosicionamento;
+use crate::application::fase_selecao_dificuldade::FaseSelecaoDificuldade;
 use crate::application::helpers::{conversao_coordenadas, coordenadas, cursor};
 use crate::application::gerenciador_turnos::{GerenciadorTurnos, EstadoTurno};
 use crate::domain::disparo::ResultadoDisparo;
@@ -18,8 +19,9 @@ const DELAY_TURNO_IA: f64 = 0.7;
 #[class(base = Node2D)]
 pub struct ControladorBatalha {
     jogador_humano: Jogador,
-    jogador_ia: JogadorIA,
+    jogador_ia: Option<JogadorIA>,
     fase_posicionamento: FasePosicionamento,
+    fase_selecao_dificuldade: FaseSelecaoDificuldade,
     gerenciador_turnos: GerenciadorTurnos,
     tempo_restante_ia: f64,
     tooltip_instrucao: Option<Gd<Label>>,
@@ -36,8 +38,9 @@ impl INode2D for ControladorBatalha {
 
         Self {
             jogador_humano: Jogador::novo_humano(),
-            jogador_ia: JogadorIA::novo_facil(),
+            jogador_ia: None,
             fase_posicionamento: FasePosicionamento::nova(),
+            fase_selecao_dificuldade: FaseSelecaoDificuldade::nova(),
             gerenciador_turnos: GerenciadorTurnos::novo(total_navios),
             tempo_restante_ia: 0.0,
             tooltip_instrucao: None,
@@ -55,6 +58,23 @@ impl INode2D for ControladorBatalha {
     }
 
     fn process(&mut self, delta: f64) {
+        if self.gerenciador_turnos.estado_atual() == EstadoTurno::SelecaoDificuldade {
+            if let Some(mut tooltip) = self.tooltip_instrucao.clone() {
+                tooltip.set_text(self.fase_selecao_dificuldade.texto_tooltip());
+                tooltip.set_visible(true);
+                tooltip.set_position(Vector2::new(20.0, 20.0));
+            }
+            
+            if let Some(campo_jogador) = self.base().try_get_node_as::<TileMapLayer>("CampoJogador") {
+                cursor::esconder_cursor(campo_jogador);
+            }
+            if let Some(campo_ia) = self.base().try_get_node_as::<TileMapLayer>("CampoIA") {
+                cursor::esconder_cursor(campo_ia);
+            }
+            
+            return;
+        }
+
         self.atualizar_tooltip_posicionamento();
         
         if self.gerenciador_turnos.estado_atual() == EstadoTurno::PosicionamentoJogador {
@@ -79,6 +99,19 @@ impl INode2D for ControladorBatalha {
 
     fn input(&mut self, event: Gd<InputEvent>) {
         if self.gerenciador_turnos.jogo_terminou() {
+            return;
+        }
+
+        if self.gerenciador_turnos.estado_atual() == EstadoTurno::SelecaoDificuldade {
+            if let Ok(key_event) = event.try_cast::<InputEventKey>() {
+                if key_event.is_pressed() && !key_event.is_echo() {
+                    let keycode = key_event.get_keycode();
+                    if let Some(ia) = self.fase_selecao_dificuldade.processar_tecla(keycode) {
+                        self.jogador_ia = Some(ia);
+                        self.gerenciador_turnos.confirmar_dificuldade();
+                    }
+                }
+            }
             return;
         }
         
@@ -157,10 +190,11 @@ impl ControladorBatalha {
 
     fn iniciar_fase_batalha(&mut self) {
         self.gerenciador_turnos.finalizar_posicionamento_jogador();
-        self.jogador_ia
-            .jogador_mut()
-            .tabuleiro_mut()
-            .preencher_aleatoriamente();
+        
+        if let Some(ref mut ia) = self.jogador_ia {
+            ia.jogador_mut().tabuleiro_mut().preencher_aleatoriamente();
+        }
+        
         self.limpar_preview_posicionamento();
         self.gerenciador_turnos.iniciar_jogo();
     }
@@ -218,7 +252,11 @@ impl ControladorBatalha {
             return;
         };
 
-        let retorno = self.jogador_ia.receber_disparo(x, y);
+        let Some(ref mut ia) = self.jogador_ia else {
+            return;
+        };
+
+        let retorno = ia.receber_disparo(x, y);
         godot_print!("{}", retorno.mensagem);
 
         render_resultado_disparo(&mut enemy_map, map_coord, &retorno.resultado);
@@ -229,7 +267,7 @@ impl ControladorBatalha {
             
             self.gerenciador_turnos.processar_ataque_jogador(acertou, afundou);
             
-            if self.jogador_ia.perdeu() {
+            if ia.perdeu() {
                 return;
             }
             
@@ -240,15 +278,18 @@ impl ControladorBatalha {
     }
 
     fn executar_turno_ia(&mut self) {
-        let Some((x, y)) = self
-            .jogador_ia
-            .escolher_alvo(self.jogador_humano.tabuleiro())
-        else {
+        let Some(ref mut ia) = self.jogador_ia else {
+            return;
+        };
+
+        let Some((x, y)) = ia.escolher_alvo(self.jogador_humano.tabuleiro()) else {
             return;
         };
 
         let retorno = self.jogador_humano.receber_disparo(x, y);
         godot_print!("IA: {}", retorno.mensagem);
+
+        ia.notificar_resultado(x, y, &retorno);
 
         if let Some(mut player_map) = self.base().try_get_node_as::<TileMapLayer>("CampoJogador") {
             render_resultado_disparo(

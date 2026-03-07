@@ -1,5 +1,6 @@
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EstadoTurno {
+    SelecaoDificuldade,
     PosicionamentoJogador,
     PosicionamentoIA,
     TurnoJogador,
@@ -18,7 +19,7 @@ pub struct GerenciadorTurnos {
 impl GerenciadorTurnos {
     pub fn novo(total_navios_por_jogador: u32) -> Self {
         Self {
-            estado_atual: EstadoTurno::PosicionamentoJogador,
+            estado_atual: EstadoTurno::SelecaoDificuldade,
             numero_turno: 0,
             navios_jogador: total_navios_por_jogador,
             navios_ia: total_navios_por_jogador,
@@ -27,6 +28,12 @@ impl GerenciadorTurnos {
 
     pub fn estado_atual(&self) -> EstadoTurno {
         self.estado_atual
+    }
+
+    pub fn confirmar_dificuldade(&mut self) {
+        if self.estado_atual == EstadoTurno::SelecaoDificuldade {
+            self.estado_atual = EstadoTurno::PosicionamentoJogador;
+        }
     }
 
     pub fn finalizar_posicionamento_jogador(&mut self) {
