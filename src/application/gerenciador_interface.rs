@@ -1,9 +1,8 @@
-use godot::classes::{Button, FontFile, Label, Node2D, ResourceLoader, VBoxContainer};
+use godot::classes::{Button, FontFile, Label, Node2D, ResourceLoader};
 use godot::global::HorizontalAlignment;
 use godot::prelude::*;
 
 use crate::application::gerenciador_turnos::EstadoTurno;
-use crate::application::fase_posicionamento::NavioDisponivel;
 
 pub struct GerenciadorInterface {
     label_fase: Option<Gd<Label>>,
@@ -16,8 +15,6 @@ pub struct GerenciadorInterface {
     botao_medio: Option<Gd<Button>>,
     botao_dificil: Option<Gd<Button>>,
     botao_confirmar_posicionamento: Option<Gd<Button>>,
-    container_navios: Option<Gd<VBoxContainer>>,
-    font: Option<Gd<FontFile>>,
 }
 
 impl GerenciadorInterface {
@@ -33,8 +30,6 @@ impl GerenciadorInterface {
             botao_medio: None,
             botao_dificil: None,
             botao_confirmar_posicionamento: None,
-            container_navios: None,
-            font: None,
         }
     }
 
@@ -191,17 +186,6 @@ impl GerenciadorInterface {
             botao.set_visible(false);
             self.botao_confirmar_posicionamento = Some(botao);
         }
-
-        if let Some(mut container) = node.try_get_node_as::<VBoxContainer>("ContainerNavios") {
-            container.set_position(Vector2::new(150.0, 380.0));
-            container.set_size(Vector2::new(300.0, 100.0));
-            container.add_theme_constant_override("separation", 8);
-            container.set_visible(false);
-            self.container_navios = Some(container);
-        }
-
-        // Guardar fonte para uso posterior
-        self.font = font;
     }
 
     pub fn atualizar(&mut self, estado: EstadoTurno, rodada: u32) {
@@ -264,10 +248,6 @@ impl GerenciadorInterface {
                 if let Some(mut botao) = self.botao_dificil.clone() {
                     botao.set_visible(false);
                 }
-                // Mostrar container de navios durante posicionamento
-                if let Some(mut container) = self.container_navios.clone() {
-                    container.set_visible(true);
-                }
             }
             EstadoTurno::TurnoJogador | EstadoTurno::TurnoIA => {
                 if let Some(mut label_fase) = self.label_fase.clone() {
@@ -291,9 +271,6 @@ impl GerenciadorInterface {
                 if let Some(mut label_ajuda) = self.label_ajuda_posicionamento.clone() {
                     label_ajuda.set_visible(false);
                 }
-                if let Some(mut container) = self.container_navios.clone() {
-                    container.set_visible(false);
-                }
             }
             EstadoTurno::VitoriaJogador => {
                 if let Some(mut label_fase) = self.label_fase.clone() {
@@ -311,9 +288,6 @@ impl GerenciadorInterface {
                 }
                 if let Some(mut label_ajuda) = self.label_ajuda_posicionamento.clone() {
                     label_ajuda.set_visible(false);
-                }
-                if let Some(mut container) = self.container_navios.clone() {
-                    container.set_visible(false);
                 }
             }
             EstadoTurno::VitoriaIA => {
@@ -349,50 +323,6 @@ impl GerenciadorInterface {
     pub fn esconder_botao_confirmar(&mut self) {
         if let Some(mut botao) = self.botao_confirmar_posicionamento.clone() {
             botao.set_visible(false);
-        }
-    }
-
-    pub fn atualizar_container_navios(&mut self, navios: &[NavioDisponivel]) {
-        if let Some(mut container) = self.container_navios.clone() {
-            // Limpar labels antigos
-            let children = container.get_children();
-            for i in 0..children.len() {
-                if let Some(mut child) = children.get(i) {
-                    child.queue_free();
-                }
-            }
-
-            // Criar nova label para cada tipo de navio
-            for navio in navios {
-                if navio.quantidade_disponivel > 0 {
-                    let mut label = Label::new_alloc();
-                    let texto = format!("{} ({})", navio.nome, navio.quantidade_disponivel);
-                    label.set_text(texto.as_str());
-                    
-                    // Aplicar fonte Retro Gaming
-                    if let Some(ref font_file) = self.font {
-                        label.add_theme_font_override("font", font_file);
-                    }
-                    label.add_theme_font_size_override("font_size", 18);
-                    label.add_theme_color_override("font_color", Color::from_rgb(1.0, 1.0, 1.0));
-                    label.add_theme_color_override("font_outline_color", Color::from_rgb(0.0, 0.0, 0.0));
-                    label.add_theme_constant_override("outline_size", 2);
-                    label.set_horizontal_alignment(HorizontalAlignment::CENTER);
-                    container.add_child(&label);
-                }
-            }
-        }
-    }
-
-    pub fn mostrar_container_navios(&mut self) {
-        if let Some(mut container) = self.container_navios.clone() {
-            container.set_visible(true);
-        }
-    }
-
-    pub fn esconder_container_navios(&mut self) {
-        if let Some(mut container) = self.container_navios.clone() {
-            container.set_visible(false);
         }
     }
 }

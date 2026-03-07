@@ -237,6 +237,7 @@ impl ControladorBatalha {
         self.gerenciador_turnos.forcar_vitoria_ia();
     }
 
+    #[func]
     pub fn confirmar_posicionamento(&mut self) {
         if self.fase_posicionamento.em_modo_edicao() 
             && self.fase_posicionamento.todos_posicionados() {
