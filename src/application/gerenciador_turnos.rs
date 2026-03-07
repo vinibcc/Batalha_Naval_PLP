@@ -55,6 +55,10 @@ impl GerenciadorTurnos {
             }
         }
 
+        if _acertou {
+            return true;
+        }
+
         self.avancar_para_turno_ia();
         true
     }
@@ -70,6 +74,10 @@ impl GerenciadorTurnos {
                 self.estado_atual = EstadoTurno::VitoriaIA;
                 return true;
             }
+        }
+
+        if _acertou {
+            return true;
         }
 
         self.avancar_para_turno_jogador();

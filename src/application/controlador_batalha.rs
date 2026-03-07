@@ -233,7 +233,7 @@ impl ControladorBatalha {
                 return;
             }
             
-            if !self.gerenciador_turnos.jogo_terminou() {
+            if !acertou && !self.gerenciador_turnos.jogo_terminou() {
                 self.tempo_restante_ia = DELAY_TURNO_IA;
             }
         }
@@ -262,6 +262,10 @@ impl ControladorBatalha {
         let afundou = matches!(retorno.resultado, ResultadoDisparo::Afundou(_));
         
         self.gerenciador_turnos.processar_ataque_ia(acertou, afundou);
+
+        if acertou && self.gerenciador_turnos.estado_atual() == EstadoTurno::TurnoIA {
+            self.tempo_restante_ia = DELAY_TURNO_IA;
+        }
     }
 
     fn atualizar_controle_cursor(&mut self) {
