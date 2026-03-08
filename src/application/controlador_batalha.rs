@@ -1,5 +1,5 @@
 use godot::classes::{INode2D, Input, InputEvent, InputEventKey, InputEventMouseButton, Label, Node2D, TileMapLayer};
-use godot::global::{Key, MouseButton};
+use godot::global::MouseButton;
 use godot::prelude::*;
 
 use crate::application::fase_posicionamento::FasePosicionamento;
@@ -12,7 +12,8 @@ use crate::domain::disparo::ResultadoDisparo;
 use crate::domain::jogador::Jogador;
 use crate::domain::jogador_ia::JogadorIA;
 use crate::presentation::batalha::{
-    limpar_preview, render_preview_posicionamento, render_resultado_disparo, render_tabuleiro_jogador,
+    limpar_preview, render_preview_posicionamento, render_resultado_disparo, 
+    render_navio_afundado, render_tabuleiro_jogador,
 };
 
 const DELAY_TURNO_IA: f64 = 1.0;
@@ -31,6 +32,7 @@ pub struct ControladorBatalha {
     estado_anterior: EstadoTurno,
     tooltip_instrucao: Option<Gd<Label>>,
     resultado_final_emitido: bool,
+    vitoria_registrada: Option<bool>,
     base: Base<Node2D>,
 }
 
@@ -54,6 +56,7 @@ impl INode2D for ControladorBatalha {
             estado_anterior: EstadoTurno::SelecaoDificuldade,
             tooltip_instrucao: None,
             resultado_final_emitido: false,
+            vitoria_registrada: None,
             base,
         }
     }
@@ -138,17 +141,8 @@ impl INode2D for ControladorBatalha {
     }
 
     fn input(&mut self, event: Gd<InputEvent>) {
-        // Detectar R para reiniciar quando o jogo terminou
+        // Game over state is handled by the Continuar button
         if self.gerenciador_turnos.jogo_terminou() {
-            if let Ok(key_event) = event.try_cast::<InputEventKey>() {
-                if key_event.is_pressed() && !key_event.is_echo() {
-                    let keycode = key_event.get_keycode();
-                    if keycode == Key::R {
-                        let mut tree = self.base().get_tree();
-                        tree.reload_current_scene();
-                    }
-                }
-            }
             return;
         }
 
@@ -236,6 +230,23 @@ impl ControladorBatalha {
 
         self.gerenciador_turnos.forcar_vitoria_ia();
     }
+
+    #[func]
+    pub fn confirmar_posicionamento(&mut self) {
+        if self.fase_posicionamento.em_modo_edicao() 
+            && self.fase_posicionamento.todos_posicionados() {
+            self.gerenciador_interface.esconder_botao_confirmar();
+            self.iniciar_fase_batalha();
+        }
+    }
+
+    #[func]
+    pub fn continuar(&mut self) {
+        if let Some(vitoria) = self.vitoria_registrada {
+            self.base_mut()
+                .emit_signal("batalha_encerrada", &[vitoria.to_variant()]);
+        }
+    }
 }
 
 impl ControladorBatalha {
@@ -245,8 +256,8 @@ impl ControladorBatalha {
         }
 
         self.resultado_final_emitido = true;
-        self.base_mut()
-            .emit_signal("batalha_encerrada", &[vitoria.to_variant()]);
+        self.vitoria_registrada = Some(vitoria);
+        // Signal will be emitted by continuar() method when button is pressed
     }
 
     fn atualizar_tooltip_posicionamento(&mut self) {
@@ -288,6 +299,18 @@ impl ControladorBatalha {
             return;
         };
 
+        // Se está em modo edição, tentar remover navio
+        if self.fase_posicionamento.em_modo_edicao() {
+            if let Some(nome_navio) = self.jogador_humano.tabuleiro_mut().remover_navio_na_posicao(x, y) {
+                if self.fase_posicionamento.remover_navio(&nome_navio) {
+                    self.atualizar_visual_meu_campo();
+                    self.gerenciador_interface.esconder_botao_confirmar();
+                }
+            }
+            return;
+        }
+
+        // Tentar posicionar novo navio
         match self
             .fase_posicionamento
             .tentar_posicionar_navio(&mut self.jogador_humano, x, y)
@@ -295,7 +318,9 @@ impl ControladorBatalha {
             Ok(concluiu) => {
                 self.atualizar_visual_meu_campo();
                 if concluiu {
-                    self.iniciar_fase_batalha();
+                    // Entrar em modo edição ao invés de começar imediatamente
+                    self.fase_posicionamento.ativar_modo_edicao();
+                    self.gerenciador_interface.mostrar_botao_confirmar();
                 }
             }
             Err(_) => {}
@@ -377,6 +402,18 @@ impl ControladorBatalha {
         };
 
         render_resultado_disparo(&mut enemy_map, map_coord, &retorno.resultado);
+        
+        // Se um navio afundou, renderizar todas as suas células como afundadas
+        if let ResultadoDisparo::Afundou(_) = &retorno.resultado {
+            if let Some(ref ia) = self.jogador_ia {
+                // Encontrar o índice do navio que afundou
+                for (idx, navio) in ia.tabuleiro().navios.iter().enumerate() {
+                    if navio.esta_afundado() {
+                        render_navio_afundado(&mut enemy_map, ia.tabuleiro(), idx);
+                    }
+                }
+            }
+        }
 
         if retorno.resultado.foi_valido() {
             // Só tocar som se o disparo foi válido
@@ -427,6 +464,16 @@ impl ControladorBatalha {
                 Vector2i::new(y as i32, x as i32),
                 &retorno.resultado,
             );
+            
+            // Se um navio afundou, renderizar todas as suas células como afundadas
+            if let ResultadoDisparo::Afundou(_) = &retorno.resultado {
+                // Encontrar o índice do navio que afundou
+                for (idx, navio) in self.jogador_humano.tabuleiro().navios.iter().enumerate() {
+                    if navio.esta_afundado() {
+                        render_navio_afundado(&mut player_map, self.jogador_humano.tabuleiro(), idx);
+                    }
+                }
+            }
         }
 
         let acertou = matches!(retorno.resultado, ResultadoDisparo::Acerto | ResultadoDisparo::Afundou(_));
